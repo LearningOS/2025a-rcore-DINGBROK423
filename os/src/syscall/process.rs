@@ -43,13 +43,13 @@ pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
     match _trace_request {
         0 => {
             let target_addr = _id as *const u8;
-            println!("trace request: 0, read value {} from address 0x{:x}", byte_value, _id);
+            println!("address 0x{:x}",  _id);
             target_addr as isize
         }
         1 => {
             let target_addr = _id as *mut u8;
             unsafe{*target_addr= (_data & 0xff) as u8};
-            println!("trace request: 1, wrote value {} to address 0x{:x}", byte_value, _id);
+            println!("address 0x{:x}", _id);
             0
         }
         2 => {

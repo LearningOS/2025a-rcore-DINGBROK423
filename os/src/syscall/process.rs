@@ -50,7 +50,7 @@ pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
             let target_addr = _id as *mut u8;
             unsafe{*target_addr= (_data & 0xff) as u8};
             println!("address 0x{:x}", _id);
-            0
+            1
         }
         2 => {
             let current = TASK_MANAGER.get_current_task_id();

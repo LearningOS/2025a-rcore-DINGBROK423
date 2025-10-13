@@ -14,7 +14,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::config::{MAX_APP_NUM, MAX_ID, MAX_TASK};
+use crate::config::{MAX_APP_NUM, MAX_ID};
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
 use lazy_static::*;
@@ -77,8 +77,8 @@ lazy_static! {
     ///
     /// A 2D array to count the number of times each syscall is called by each task.
     /// The first dimension is the task ID, and the second dimension is the syscall ID.
-    pub static ref COUNTS: UPSafeCell<[[usize; MAX_ID]; MAX_TASK]> = unsafe {
-        UPSafeCell::new([[0; MAX_ID]; MAX_TASK])
+    pub static ref COUNTS: UPSafeCell<[[usize; MAX_ID]; MAX_APP_NUM]> = unsafe {
+        UPSafeCell::new([[0; MAX_ID]; MAX_APP_NUM])
     };
 }
 
@@ -104,7 +104,9 @@ impl TaskManager {
     /// Get the current task ID
     pub fn get_current_task_id(&self) -> usize {
         let inner = self.inner.exclusive_access();
-        inner.current_task
+        let ans=inner.current_task;
+        drop(inner);
+        ans
     }
 
     /// Change the status of current `Running` task into `Ready`.

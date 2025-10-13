@@ -21,5 +21,4 @@ pub const CLOCK_FREQ: usize = 12500000;
 pub const MEMORY_END: usize = 0x88000000;
 /// the max number of syscalls
 pub const MAX_ID: usize = 512;
-/// the max number of tasks
-pub const MAX_TASK: usize = 512;
+

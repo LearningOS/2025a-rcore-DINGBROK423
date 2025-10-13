@@ -49,14 +49,14 @@ pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
         1 => {
             let target_addr = _id as *mut u8;
             unsafe{*target_addr= (_data & 0xff) as u8};
-            println!("address 0x{:x}", _id);
-            1
+            0
         }
         2 => {
             let current = TASK_MANAGER.get_current_task_id();
-            let syscall_id=_id as usize;
+            let syscall_id=_id ;
             println!("syscall_id: {}, count: {}", syscall_id, COUNTS.exclusive_access()[current][syscall_id]);
             COUNTS.exclusive_access()[current][syscall_id] as isize
+
         }
         _ => {
             trace!("kernel: sys_trace");

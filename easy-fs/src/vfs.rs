@@ -183,4 +183,43 @@ impl Inode {
         });
         block_cache_sync_all();
     }
+    /// Create a hard link to target inode under current inode by name
+    pub fn link(&self, name: &str, target: &Arc<Inode>) -> bool {
+        let mut fs = self.fs.lock();
+        // 1. 检查是否已存在同名目录项
+        let exists = self.read_disk_inode(|disk_inode| {
+            self.find_inode_id(name, disk_inode).is_some()
+        });
+        if exists {
+            return false;
+        }
+        // 2. 获取目标 inode 的 id
+        let target_inode_id = target.read_disk_inode(|disk_inode| disk_inode.inode_id);
+
+        // 3. 在当前目录下添加目录项，指向目标 inode
+        self.modify_disk_inode(|dir_inode| {
+            let file_count = (dir_inode.size as usize) / DIRENT_SZ;
+            let new_size = (file_count + 1) * DIRENT_SZ;
+            self.increase_size(new_size as u32, dir_inode, &mut fs);
+            let dirent = DirEntry::new(name, target_inode_id);
+            dir_inode.write_at(
+                file_count * DIRENT_SZ,
+                dirent.as_bytes(),
+                &self.block_device,
+            );
+        });
+
+        // 4. 增加目标 inode 的 link count
+        let (block_id, block_offset) = fs.get_disk_inode_pos(target_inode_id);
+        get_block_cache(block_id, Arc::clone(&self.block_device))
+            .lock()
+            .modify(block_offset, |disk_inode: &mut DiskInode| {
+                disk_inode.nlink += 1;
+            });
+
+        block_cache_sync_all();
+        true
+    }
+
+
 }

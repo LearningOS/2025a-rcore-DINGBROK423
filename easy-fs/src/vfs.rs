@@ -185,6 +185,8 @@ impl Inode {
     }
     /// Create a hard link to target inode under current inode by name
     pub fn link(&self, name: &str, target: &Arc<Inode>) -> bool {
+        #[cfg(feature = "debug_log")]
+        debug!("link: start, name={}", name);
         let mut fs = self.fs.lock();
         // 1. 检查是否已存在同名目录项
         let exists = self.read_disk_inode(|disk_inode| {
@@ -194,7 +196,12 @@ impl Inode {
             return false;
         }
         // 2. 获取目标 inode 的 id
-        let target_inode_id = target.read_disk_inode(|disk_inode| disk_inode.inode_id);
+        let target_inode_id = fs.get_inode_id_from_pos(
+            target.block_id as u32, 
+            target.block_offset
+        );
+        #[cfg(feature = "debug_log")]
+        debug!("link: target_inode_id={}", target_inode_id);
 
         // 3. 在当前目录下添加目录项，指向目标 inode
         self.modify_disk_inode(|dir_inode| {
@@ -208,15 +215,16 @@ impl Inode {
                 &self.block_device,
             );
         });
-
+        #[cfg(feature = "debug_log")]
+        debug!("link: target_inode_idid={}", target_inode_id);
         // 4. 增加目标 inode 的 link count
-        let (block_id, block_offset) = fs.get_disk_inode_pos(target_inode_id);
-        get_block_cache(block_id, Arc::clone(&self.block_device))
+        get_block_cache(target.block_id, Arc::clone(&self.block_device))
             .lock()
-            .modify(block_offset, |disk_inode: &mut DiskInode| {
+            .modify(target.block_offset, |disk_inode: &mut DiskInode| {
                 disk_inode.nlink += 1;
             });
-
+        #[cfg(feature = "debug_log")]
+        debug!("link: done");
         block_cache_sync_all();
         true
     }

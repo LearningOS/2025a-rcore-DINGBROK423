@@ -15,6 +15,8 @@ pub trait File: Send + Sync {
     fn read(&self, buf: UserBuffer) -> usize;
     /// write to the file from buf, return the number of bytes written
     fn write(&self, buf: UserBuffer) -> usize;
+    /// get the stat of the inode, return None if not supported
+    fn get_stat(&self) -> Option<Stat> { None }
 }
 
 /// The stat of a inode

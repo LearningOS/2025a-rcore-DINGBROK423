@@ -8,9 +8,12 @@ use alloc::vec::Vec;
 use spin::{Mutex, MutexGuard};
 /// Virtual filesystem layer over easy-fs
 pub struct Inode {
-    block_id: usize,
-    block_offset: usize,
-    fs: Arc<Mutex<EasyFileSystem>>,
+    /// The block ID where the inode is stored
+    pub block_id: usize,
+    /// The offset within the block for the inode
+    pub block_offset: usize,
+    /// The filesystem instance
+    pub fs: Arc<Mutex<EasyFileSystem>>,
     block_device: Arc<dyn BlockDevice>,
 }
 
@@ -30,7 +33,7 @@ impl Inode {
         }
     }
     /// Call a function over a disk inode to read it
-    fn read_disk_inode<V>(&self, f: impl FnOnce(&DiskInode) -> V) -> V {
+    pub fn read_disk_inode<V>(&self, f: impl FnOnce(&DiskInode) -> V) -> V {
         get_block_cache(self.block_id, Arc::clone(&self.block_device))
             .lock()
             .read(self.block_offset, f)
@@ -229,5 +232,66 @@ impl Inode {
         true
     }
 
+    /// Unlink a file by name under current inode
+    pub fn unlink(&self, name: &str) -> bool {
+        let mut fs = self.fs.lock();
+        // Find the directory entry
+        let opt = self.read_disk_inode(|disk_inode| {
+            assert!(disk_inode.is_dir());
+            let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+            for i in 0..file_count {
+                let mut dirent = DirEntry::empty();
+                disk_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device);
+                if dirent.name() == name {
+                    return Some((dirent.inode_id() as u32, i));
+                }
+            }
+            None
+        });
+        if let Some((target_inode_id, dirent_index)) = opt {
+            // Get target inode position
+            let (target_block_id, target_block_offset) = fs.get_disk_inode_pos(target_inode_id);
+            // Decrease nlink
+            let mut should_dealloc = false;
+            get_block_cache(target_block_id as usize, Arc::clone(&self.block_device))
+                .lock()
+                .modify(target_block_offset, |disk_inode: &mut DiskInode| {
+                    disk_inode.nlink -= 1;
+                    if disk_inode.nlink == 0 {
+                        should_dealloc = true;
+                    }
+                });
+            if should_dealloc {
+                // Deallocate data blocks
+                let data_blocks = get_block_cache(target_block_id as usize, Arc::clone(&self.block_device))
+                    .lock()
+                    .modify(target_block_offset, |disk_inode: &mut DiskInode| {
+                        disk_inode.clear_size(&self.block_device)
+                    });
+                for block in data_blocks {
+                    fs.dealloc_data(block);
+                }
+                // Deallocate inode
+                fs.dealloc_inode(target_inode_id);
+            }
+            // Remove directory entry
+            self.modify_disk_inode(|disk_inode| {
+                let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+                // Move the last entry to the current position
+                if dirent_index < file_count - 1 {
+                    let mut last_dirent = DirEntry::empty();
+                    disk_inode.read_at((file_count - 1) * DIRENT_SZ, last_dirent.as_bytes_mut(), &self.block_device);
+                    disk_inode.write_at(dirent_index * DIRENT_SZ, last_dirent.as_bytes(), &self.block_device);
+                }
+                // Decrease size
+                let new_size = ((file_count - 1) * DIRENT_SZ) as u32;
+                disk_inode.size = new_size;
+            });
+            block_cache_sync_all();
+            true
+        } else {
+            false
+        }
+    }
 
 }

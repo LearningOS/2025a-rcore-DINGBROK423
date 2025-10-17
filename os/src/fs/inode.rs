@@ -53,6 +53,17 @@ impl OSInode {
         }
         v
     }
+    /// Get inode id
+    pub fn inode_id(&self) -> u32 {
+        let inner = self.inner.exclusive_access();
+        let fs = inner.inode.fs.lock();
+        fs.get_inode_id_from_pos(inner.inode.block_id as u32, inner.inode.block_offset)
+    }
+    /// Check if it's a directory
+    pub fn is_dir(&self) -> bool {
+        let inner = self.inner.exclusive_access();
+        inner.inode.read_disk_inode(|disk_inode| disk_inode.is_dir())
+    }
 }
 
 lazy_static! {
@@ -156,5 +167,24 @@ impl File for OSInode {
             total_write_size += write_size;
         }
         total_write_size
+    }
+    fn get_stat(&self) -> Option<super::Stat> {
+        let inner = self.inner.exclusive_access();
+        let nlink = inner.inode.read_disk_inode(|disk_inode| disk_inode.nlink);
+        let inode_id = {
+            let fs = inner.inode.fs.lock();
+            fs.get_inode_id_from_pos(inner.inode.block_id as u32, inner.inode.block_offset)
+        };
+        drop(inner);
+        
+        let is_dir = self.is_dir();
+        
+        Some(super::Stat {
+            dev: 0,
+            ino: inode_id as u64,
+            mode: if is_dir { super::StatMode::DIR } else { super::StatMode::FILE },
+            nlink,
+            pad: [0; 7],
+        })
     }
 }

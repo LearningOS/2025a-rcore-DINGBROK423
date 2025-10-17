@@ -1,6 +1,6 @@
 //! File and filesystem-related syscalls
 use crate::fs::{open_file, OpenFlags, Stat, ROOT_INODE};
-use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
+use crate::mm::{translated_byte_buffer, translated_str, UserBuffer, translated_refmut};
 use crate::task::{current_task, current_user_token};
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
@@ -75,13 +75,25 @@ pub fn sys_close(fd: usize) -> isize {
     0
 }
 
-/// YOUR JOB: Implement fstat.
-pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_fstat NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+pub fn sys_fstat(fd: usize, st: *mut Stat) -> isize {
+    trace!("kernel:pid[{}] sys_fstat", current_task().unwrap().pid.0);
+    let token = current_user_token();
+    let task = current_task().unwrap();
+    let inner = task.inner_exclusive_access();
+    if fd >= inner.fd_table.len() || inner.fd_table[fd].is_none() {
+        return -1;
+    }
+    let file = inner.fd_table[fd].as_ref().unwrap().clone();
+    // release inner
+    drop(inner);
+    // Get file stat
+    if let Some(stat) = file.get_stat() {
+        // Write to user space
+        *translated_refmut(token, st) = stat;
+        0
+    } else {
+        -1
+    }
 }
 
 /// YOUR JOB: Implement linkat.
@@ -110,8 +122,14 @@ pub fn sys_linkat(_old_name: *const u8, _new_name: *const u8) -> isize {
 /// YOUR JOB: Implement unlinkat.
 pub fn sys_unlinkat(_name: *const u8) -> isize {
     trace!(
-        "kernel:pid[{}] sys_unlinkat NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_unlinkat",
         current_task().unwrap().pid.0
     );
-    -1
+    let token = current_user_token();
+    let path = translated_str(token, _name);
+    if ROOT_INODE.unlink(&path) {
+        0
+    } else {
+        -1
+    }
 }

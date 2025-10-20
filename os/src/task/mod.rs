@@ -12,12 +12,14 @@
 mod context;
 mod id;
 mod manager;
-mod process;
+pub mod process;
 mod processor;
 mod signal;
 mod switch;
 #[allow(clippy::module_inception)]
 mod task;
+/// deadlock detection module
+pub mod deadlock;
 
 use self::id::TaskUserRes;
 use crate::fs::{open_file, OpenFlags};

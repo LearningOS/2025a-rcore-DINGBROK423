@@ -10,8 +10,11 @@ use alloc::{string::String, sync::Arc, vec::Vec};
 
 #[repr(C)]
 #[derive(Debug)]
+/// TimeVal structure for sys_get_time syscall
 pub struct TimeVal {
+    /// seconds
     pub sec: usize,
+    /// microseconds
     pub usec: usize,
 }
 
